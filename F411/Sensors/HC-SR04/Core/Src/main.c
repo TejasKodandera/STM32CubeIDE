@@ -22,27 +22,21 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "usbd_cdc_if.h"
-#include "string.h"
+#include "AAF.h"
+#include "stdio.h"
 
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-typedef struct {
-	GPIO_TypeDef *TRIG_PORT;
-	uint16_t TRIG_PIN;
-	GPIO_TypeDef *ECHO_PORT;
-	uint16_t ECHO_PIN;
-} HCSR04_TypeDef;
 
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define BUFFER_LENGTH 64
-#define REFRESH_DELAY 100
-#define TIMER_HANDLE &htim4
+#define SOL_INTERVAL 1000	//Sign of Life: Host drops connection if data is not received periodically
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -51,7 +45,7 @@ typedef struct {
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-TIM_HandleTypeDef htim4;
+TIM_HandleTypeDef htim1;
 
 /* USER CODE BEGIN PV */
 char buffer[BUFFER_LENGTH];
@@ -61,226 +55,216 @@ char buffer[BUFFER_LENGTH];
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_TIM4_Init(void);
+static void MX_TIM1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void delayMicroseconds(uint16_t delay) {
-	__HAL_TIM_SET_COUNTER(&htim4, 0);  // set the counter value a 0
-	while (__HAL_TIM_GET_COUNTER(&htim4) < delay)
-		;  // wait for the counter to reach the us input in the parameter
+int _write(int file, char *ptr, int len) {
+	int DataIdx;
+	for (DataIdx = 0; DataIdx < len; DataIdx++) {
+		ITM_SendChar(*ptr++);
+	}
+	return len;
 }
 
-uint16_t pulseIn(GPIO_TypeDef *port, uint16_t pin, uint8_t value,
-		uint16_t timeout) {
-	uint16_t pulseTime = 0;
-
-	__HAL_TIM_SET_COUNTER(&htim4, 0);
-
-	while ((HAL_GPIO_ReadPin(port, pin) == value) && (pulseTime < timeout)){
-		pulseTime = __HAL_TIM_GET_COUNTER(&htim4);
-	}
-
-	if (pulseTime >= timeout) {
-		return 0;
-	} else {
-		return pulseTime;
-	}
-}
 /* USER CODE END 0 */
 
 /**
- * @brief  The application entry point.
- * @retval int
- */
-int main(void) {
+  * @brief  The application entry point.
+  * @retval int
+  */
+int main(void)
+{
 
-	/* USER CODE BEGIN 1 */
-	float d = 0;
+  /* USER CODE BEGIN 1 */
 
-	char message[BUFFER_LENGTH + 20];
+  /* USER CODE END 1 */
 
-	HCSR04_TypeDef HCSR04;
-	HCSR04.TRIG_PORT = GPIOA;
-	HCSR04.TRIG_PIN = GPIO_PIN_8;
-	HCSR04.TRIG_PORT = GPIOA;
-	HCSR04.TRIG_PIN = GPIO_PIN_9;
-	/* USER CODE END 1 */
+  /* MCU Configuration--------------------------------------------------------*/
 
-	/* MCU Configuration--------------------------------------------------------*/
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
 
-	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-	HAL_Init();
+  /* USER CODE BEGIN Init */
 
-	/* USER CODE BEGIN Init */
+  /* USER CODE END Init */
 
-	/* USER CODE END Init */
+  /* Configure the system clock */
+  SystemClock_Config();
 
-	/* Configure the system clock */
-	SystemClock_Config();
+  /* USER CODE BEGIN SysInit */
 
-	/* USER CODE BEGIN SysInit */
+  /* USER CODE END SysInit */
 
-	/* USER CODE END SysInit */
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_TIM1_Init();
+  MX_USB_DEVICE_Init();
+  /* USER CODE BEGIN 2 */
+	HAL_TIM_Base_Start(&htim1);
 
-	/* Initialize all configured peripherals */
-	MX_GPIO_Init();
-	MX_USB_DEVICE_Init();
-	MX_TIM4_Init();
-	/* USER CODE BEGIN 2 */
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
 
-	/* USER CODE END 2 */
+  /* USER CODE END 2 */
 
-	/* Infinite loop */
-	/* USER CODE BEGIN WHILE */
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
 	while (1) {
-		HAL_GPIO_WritePin(HCSR04.TRIG_PORT, HCSR04.TRIG_PIN, GPIO_PIN_RESET);
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
+		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
 		delayMicroseconds(2);
-		HAL_GPIO_WritePin(HCSR04.TRIG_PORT, HCSR04.TRIG_PIN, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
 		delayMicroseconds(10);
-		HAL_GPIO_WritePin(HCSR04.TRIG_PORT, HCSR04.TRIG_PIN, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
 
-		__disable_irq();
-		d = pulseIn(GPIOA, GPIO_PIN_9, GPIO_PIN_SET, 23600); // max sensor dist ~4m
-		__enable_irq();
-		d /= 58;
+		float distance = pulseIn(GPIOA, GPIO_PIN_8, GPIO_PIN_SET, 60000) / 58;
+		printf("Distance: %f \n", distance);
 
-		sprintf(message, "Distance: %f\n\r", d);
-		CDC_Transmit_FS((uint8_t*) message, strlen(message));
-		HAL_Delay(1);	//Delay for USB transmission
-
-		HAL_Delay(REFRESH_DELAY);	//Standby for next transmission
-		/* USER CODE END WHILE */
-
-		/* USER CODE BEGIN 3 */
+		HAL_Delay(100);
 	}
-	/* USER CODE END 3 */
+  /* USER CODE END 3 */
 }
 
 /**
- * @brief System Clock Configuration
- * @retval None
- */
-void SystemClock_Config(void) {
-	RCC_OscInitTypeDef RCC_OscInitStruct = { 0 };
-	RCC_ClkInitTypeDef RCC_ClkInitStruct = { 0 };
+  * @brief System Clock Configuration
+  * @retval None
+  */
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-	/** Configure the main internal regulator output voltage
-	 */
-	__HAL_RCC_PWR_CLK_ENABLE();
-	__HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
+  /** Configure the main internal regulator output voltage
+  */
+  __HAL_RCC_PWR_CLK_ENABLE();
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
-	/** Initializes the RCC Oscillators according to the specified parameters
-	 * in the RCC_OscInitTypeDef structure.
-	 */
-	RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
-	RCC_OscInitStruct.HSEState = RCC_HSE_ON;
-	RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-	RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-	RCC_OscInitStruct.PLL.PLLM = 25;
-	RCC_OscInitStruct.PLL.PLLN = 192;
-	RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-	RCC_OscInitStruct.PLL.PLLQ = 4;
-	if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
-		Error_Handler();
-	}
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 25;
+  RCC_OscInitStruct.PLL.PLLN = 192;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+  RCC_OscInitStruct.PLL.PLLQ = 4;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
 
-	/** Initializes the CPU, AHB and APB buses clocks
-	 */
-	RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK
-			| RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
-	RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-	RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-	RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
-	RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-	if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_3) != HAL_OK) {
-		Error_Handler();
-	}
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_3) != HAL_OK)
+  {
+    Error_Handler();
+  }
 }
 
 /**
- * @brief TIM4 Initialization Function
- * @param None
- * @retval None
- */
-static void MX_TIM4_Init(void) {
+  * @brief TIM1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM1_Init(void)
+{
 
-	/* USER CODE BEGIN TIM4_Init 0 */
+  /* USER CODE BEGIN TIM1_Init 0 */
 
-	/* USER CODE END TIM4_Init 0 */
+  /* USER CODE END TIM1_Init 0 */
 
-	TIM_ClockConfigTypeDef sClockSourceConfig = { 0 };
-	TIM_MasterConfigTypeDef sMasterConfig = { 0 };
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
 
-	/* USER CODE BEGIN TIM4_Init 1 */
+  /* USER CODE BEGIN TIM1_Init 1 */
 
-	/* USER CODE END TIM4_Init 1 */
-	htim4.Instance = TIM4;
-	htim4.Init.Prescaler = 95;
-	htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim4.Init.Period = 65535;
-	htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-	htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
-	if (HAL_TIM_Base_Init(&htim4) != HAL_OK) {
-		Error_Handler();
-	}
-	sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-	if (HAL_TIM_ConfigClockSource(&htim4, &sClockSourceConfig) != HAL_OK) {
-		Error_Handler();
-	}
-	sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-	if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig)
-			!= HAL_OK) {
-		Error_Handler();
-	}
-	/* USER CODE BEGIN TIM4_Init 2 */
+  /* USER CODE END TIM1_Init 1 */
+  htim1.Instance = TIM1;
+  htim1.Init.Prescaler = 95;
+  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim1.Init.Period = 65535;
+  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM1_Init 2 */
 
-	/* USER CODE END TIM4_Init 2 */
+  /* USER CODE END TIM1_Init 2 */
 
 }
 
 /**
- * @brief GPIO Initialization Function
- * @param None
- * @retval None
- */
-static void MX_GPIO_Init(void) {
-	GPIO_InitTypeDef GPIO_InitStruct = { 0 };
-	/* USER CODE BEGIN MX_GPIO_Init_1 */
-	/* USER CODE END MX_GPIO_Init_1 */
+  * @brief GPIO Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_GPIO_Init(void)
+{
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+/* USER CODE BEGIN MX_GPIO_Init_1 */
+/* USER CODE END MX_GPIO_Init_1 */
 
-	/* GPIO Ports Clock Enable */
-	__HAL_RCC_GPIOC_CLK_ENABLE();
-	__HAL_RCC_GPIOH_CLK_ENABLE();
-	__HAL_RCC_GPIOA_CLK_ENABLE();
+  /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOH_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
 
-	/*Configure GPIO pin Output Level */
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
 
-	/*Configure GPIO pin Output Level */
-	HAL_GPIO_WritePin(TRIG_PIN_GPIO_Port, TRIG_PIN_Pin, GPIO_PIN_RESET);
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(TRIG_Pin_GPIO_Port, TRIG_Pin_Pin, GPIO_PIN_RESET);
 
-	/*Configure GPIO pin : PC13 */
-	GPIO_InitStruct.Pin = GPIO_PIN_13;
-	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-	GPIO_InitStruct.Pull = GPIO_NOPULL;
-	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-	HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+  /*Configure GPIO pin : LED_Pin */
+  GPIO_InitStruct.Pin = LED_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(LED_GPIO_Port, &GPIO_InitStruct);
 
-	/*Configure GPIO pin : TRIG_PIN_Pin */
-	GPIO_InitStruct.Pin = TRIG_PIN_Pin;
-	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-	GPIO_InitStruct.Pull = GPIO_NOPULL;
-	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-	HAL_GPIO_Init(TRIG_PIN_GPIO_Port, &GPIO_InitStruct);
+  /*Configure GPIO pin : ECHO_Pin_Pin */
+  GPIO_InitStruct.Pin = ECHO_Pin_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(ECHO_Pin_GPIO_Port, &GPIO_InitStruct);
 
-	/* USER CODE BEGIN MX_GPIO_Init_2 */
-	/* USER CODE END MX_GPIO_Init_2 */
+  /*Configure GPIO pin : TRIG_Pin_Pin */
+  GPIO_InitStruct.Pin = TRIG_Pin_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(TRIG_Pin_GPIO_Port, &GPIO_InitStruct);
+
+/* USER CODE BEGIN MX_GPIO_Init_2 */
+/* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
@@ -288,16 +272,17 @@ static void MX_GPIO_Init(void) {
 /* USER CODE END 4 */
 
 /**
- * @brief  This function is executed in case of error occurrence.
- * @retval None
- */
-void Error_Handler(void) {
-	/* USER CODE BEGIN Error_Handler_Debug */
+  * @brief  This function is executed in case of error occurrence.
+  * @retval None
+  */
+void Error_Handler(void)
+{
+  /* USER CODE BEGIN Error_Handler_Debug */
 	/* User can add his own implementation to report the HAL error return state */
 	__disable_irq();
 	while (1) {
 	}
-	/* USER CODE END Error_Handler_Debug */
+  /* USER CODE END Error_Handler_Debug */
 }
 
 #ifdef  USE_FULL_ASSERT

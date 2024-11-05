@@ -12,6 +12,12 @@
 !F411/Basics/Blink_LED/Core/Src/
 !F411/Basics/Blink_LED/Core/Src/main.c
 
+!F411/Basics/Serial_Wire_Viewer/
+!F411/Basics/Serial_Wire_Viewer/Serial_Wire_Viewer.ioc
+!F411/Basics/Serial_Wire_Viewer/Core/
+!F411/Basics/Serial_Wire_Viewer/Core/Src/
+!F411/Basics/Serial_Wire_Viewer/Core/Src/main.c
+
 !F411/Communication/
 
 !F411/Communication/USBD/
